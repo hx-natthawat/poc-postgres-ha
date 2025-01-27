@@ -1,0 +1,150 @@
+networks:
+  my-network:
+    driver: bridge
+
+services:
+  pg-0:
+    image: bitnami/postgresql-repmgr:latest
+    ports:
+      - "32776:5432"
+    volumes:
+      - pg_0_data:/bitnami/postgresql
+      - ./backups/pg-0:/backups
+    environment:
+      - POSTGRESQL_POSTGRES_PASSWORD=adminpassword
+      - POSTGRESQL_USERNAME=customuser
+      - POSTGRESQL_PASSWORD=custompassword
+      - POSTGRESQL_DATABASE=customdatabase
+      - REPMGR_PASSWORD=repmgrpassword
+      - REPMGR_PRIMARY_HOST=pg-0
+      - REPMGR_PARTNER_NODES=pg-0,pg-1
+      - REPMGR_NODE_NAME=pg-0
+      - REPMGR_NODE_NETWORK_NAME=pg-0
+      - REPMGR_NODE_ID=1
+      - REPMGR_RECONNECT_ATTEMPTS=30
+      - REPMGR_RECONNECT_INTERVAL=10
+      - REPMGR_FAILOVER=automatic
+      - REPMGR_PROMOTE_COMMAND=/opt/bitnami/scripts/postgresql-repmgr/promote.sh
+      - POSTGRESQL_MASTER_PORT_NUMBER=5432
+      - POSTGRESQL_SHARED_PRELOAD_LIBRARIES=repmgr
+      - POSTGRESQL_MAX_CONNECTIONS=100
+      - REPMGR_USE_REPLICATION_SLOTS=1
+      - REPMGR_FAST_PROMOTE=true
+      - POSTGRESQL_ENABLE_TLS=no
+      - POSTGRESQL_ARCHIVE_MODE=on
+      - POSTGRESQL_ARCHIVE_COMMAND=test ! -f /backups/%f && cp %p /backups/%f
+    networks:
+      - my-network
+    healthcheck:
+      test: pg_isready -U customuser -d customdatabase
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+
+  pg-1:
+    image: bitnami/postgresql-repmgr:latest
+    ports:
+      - "32777:5432"
+    volumes:
+      - pg_1_data:/bitnami/postgresql
+      - ./backups/pg-1:/backups
+    environment:
+      - POSTGRESQL_POSTGRES_PASSWORD=adminpassword
+      - POSTGRESQL_USERNAME=customuser
+      - POSTGRESQL_PASSWORD=custompassword
+      - POSTGRESQL_DATABASE=customdatabase
+      - REPMGR_PASSWORD=repmgrpassword
+      - REPMGR_PRIMARY_HOST=pg-0
+      - REPMGR_PARTNER_NODES=pg-0,pg-1
+      - REPMGR_NODE_NAME=pg-1
+      - REPMGR_NODE_NETWORK_NAME=pg-1
+      - REPMGR_NODE_ID=2
+      - REPMGR_RECONNECT_ATTEMPTS=30
+      - REPMGR_RECONNECT_INTERVAL=10
+      - REPMGR_FAILOVER=automatic
+      - REPMGR_PROMOTE_COMMAND=/opt/bitnami/scripts/postgresql-repmgr/promote.sh
+      - POSTGRESQL_MASTER_PORT_NUMBER=5432
+      - POSTGRESQL_SHARED_PRELOAD_LIBRARIES=repmgr
+      - POSTGRESQL_MAX_CONNECTIONS=100
+      - REPMGR_USE_REPLICATION_SLOTS=1
+      - REPMGR_FAST_PROMOTE=true
+      - POSTGRESQL_ENABLE_TLS=no
+      - POSTGRESQL_ARCHIVE_MODE=on
+      - POSTGRESQL_ARCHIVE_COMMAND=test ! -f /backups/%f && cp %p /backups/%f
+    networks:
+      - my-network
+    healthcheck:
+      test: pg_isready -U customuser -d customdatabase
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    depends_on:
+      pg-0:
+        condition: service_healthy
+
+  pgpool:
+    image: bitnami/pgpool:latest
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgpool_data:/bitnami/pgpool
+    environment:
+      - PGPOOL_BACKEND_NODES=0:pg-0:5432,1:pg-1:5432
+      - PGPOOL_SR_CHECK_USER=customuser
+      - PGPOOL_SR_CHECK_PASSWORD=custompassword
+      - PGPOOL_ENABLE_LDAP=no
+      - PGPOOL_POSTGRES_USERNAME=postgres
+      - PGPOOL_POSTGRES_PASSWORD=adminpassword
+      - PGPOOL_ADMIN_USERNAME=admin
+      - PGPOOL_ADMIN_PASSWORD=adminpassword
+      - PGPOOL_ENABLE_LOAD_BALANCING=yes
+      - PGPOOL_LOAD_BALANCE_MODE=on
+      - PGPOOL_MASTER_SLAVE_MODE=on
+      - PGPOOL_MASTER_SLAVE_SUB_MODE=stream
+      - PGPOOL_PRIMARY_ROUTING=on
+      - PGPOOL_DEFAULT_POOL_SIZE=10
+      - PGPOOL_NUM_INIT_CHILDREN=10
+      - PGPOOL_BACKEND_WEIGHT0=1
+      - PGPOOL_BACKEND_WEIGHT1=1
+      - PGPOOL_STATEMENT_LEVEL_LOAD_BALANCE=on
+      - PGPOOL_PRIMARY_ROUTING_QUERY_PATTERN_LIST=INSERT,UPDATE,DELETE,CREATE,DROP,ALTER,TRUNCATE,GRANT,REVOKE
+      - PGPOOL_AUTHENTICATION_TYPE=md5
+      - PGPOOL_LOAD_BALANCE_SELECT_IN_PRIMARY=off
+      - PGPOOL_DISABLE_LOAD_BALANCE_ON_WRITE=transaction
+      - PGPOOL_WRITE_THROUGH_MODE=off
+      - PGPOOL_SESSION_ROLE_QUERY=SELECT CASE WHEN current_setting('application_name') = 'readonly' THEN 'replica' ELSE 'primary' END
+    networks:
+      - my-network
+    healthcheck:
+      test: ["CMD", "/opt/bitnami/scripts/pgpool/healthcheck.sh"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    depends_on:
+      pg-0:
+        condition: service_healthy
+      pg-1:
+        condition: service_healthy
+
+  myapp:
+    build: ./app
+    ports:
+      - "8000:8000"
+    networks:
+      - my-network
+    depends_on:
+      pgpool:
+        condition: service_healthy
+    environment:
+      - DATABASE_URL=postgresql://customuser:custompassword@pgpool:5432/customdatabase
+
+volumes:
+  pg_0_data:
+    driver: local
+  pg_1_data:
+    driver: local
+  pgpool_data:
+    driver: local
