@@ -54,3 +54,8 @@ backups/
 *.log
 *.pid
 *.sock
+
+# Environment variables
+.env
+.env.*
+!.env.example

@@ -35,21 +35,36 @@ poc-01/
 │   └── pg-1/             # Replica node backups
 ├── docker-compose.yml     # Container orchestration
 ├── test_postgres_cluster.py  # Test suite
+├── .env.example          # Template for environment variables
 └── requirements.txt       # Python dependencies
 ```
 
 ## Configuration Details
 
+### Environment Variables
+
+The application uses environment variables for configuration. Copy `.env.example` to `.env` and configure the following variables:
+
+```
+POSTGRES_USER      # Database user (default: customuser)
+POSTGRES_PASSWORD  # Database password (required)
+POSTGRES_HOST      # Database host (default: pgpool)
+POSTGRES_PORT      # Database port (default: 5432)
+POSTGRES_DB        # Database name (default: customdatabase)
+```
+
 ### PostgreSQL Configuration
 
-- Database: customdatabase
-- Users:
-  - postgres (admin): adminpassword
-  - customuser: custompassword
+- Database: Configured via environment variables
+- Users: Configured via environment variables
 - Replication:
   - Streaming replication enabled
   - Automatic failover configured
   - Archive mode enabled
+- Security:
+  - Credentials stored in environment variables
+  - No hardcoded passwords in code
+  - `.env` files excluded from version control
 
 ### Pgpool-II Configuration
 

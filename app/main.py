@@ -8,8 +8,18 @@ import os
 app = FastAPI(title="PostgreSQL Cluster Demo")
 
 # Database configuration with read-write separation
-WRITE_DATABASE_URL = "postgresql://customuser:custompassword@pgpool:5432/customdatabase?target_session_attrs=read-write"
-READ_DATABASE_URL = "postgresql://customuser:custompassword@pgpool:5432/customdatabase?target_session_attrs=any"
+PG_IS_IN_RECOVERY_QUERY = "SELECT pg_is_in_recovery()"
+DB_USER = os.getenv("POSTGRES_USER", "customuser")
+DB_PASSWORD = os.getenv("POSTGRES_PASSWORD")
+DB_HOST = os.getenv("POSTGRES_HOST", "pgpool")
+DB_PORT = os.getenv("POSTGRES_PORT", "5432")
+DB_NAME = os.getenv("POSTGRES_DB", "customdatabase")
+
+if not DB_PASSWORD:
+    raise ValueError("POSTGRES_PASSWORD environment variable must be set")
+
+WRITE_DATABASE_URL = f"postgresql://{DB_USER}:{DB_PASSWORD}@{DB_HOST}:{DB_PORT}/{DB_NAME}?target_session_attrs=read-write"
+READ_DATABASE_URL = f"postgresql://{DB_USER}:{DB_PASSWORD}@{DB_HOST}:{DB_PORT}/{DB_NAME}?target_session_attrs=any"
 
 # Create separate engines for read and write operations
 write_engine = create_engine(WRITE_DATABASE_URL)
@@ -53,7 +63,7 @@ def create_note(content: str):
     db = WriteSessionLocal()
     try:
         # Verify we're on primary before writing
-        result = db.execute(text("SELECT pg_is_in_recovery()")).scalar()
+        result = db.execute(text(PG_IS_IN_RECOVERY_QUERY)).scalar()
         if result:
             raise HTTPException(status_code=500, detail="Attempted to write to replica node")
         
@@ -78,7 +88,7 @@ def read_notes():
     db = ReadSessionLocal()
     try:
         # Check if we're reading from primary or replica
-        is_replica = db.execute(text("SELECT pg_is_in_recovery()")).scalar()
+        is_replica = db.execute(text(PG_IS_IN_RECOVERY_QUERY)).scalar()
         node_type = "replica" if is_replica else "primary"
         
         notes = db.query(Note).all()
@@ -94,7 +104,7 @@ def read_note(note_id: int):
     db = ReadSessionLocal()
     try:
         # Check if we're reading from primary or replica
-        is_replica = db.execute(text("SELECT pg_is_in_recovery()")).scalar()
+        is_replica = db.execute(text(PG_IS_IN_RECOVERY_QUERY)).scalar()
         node_type = "replica" if is_replica else "primary"
         
         note = db.query(Note).filter(Note.id == note_id).first()
